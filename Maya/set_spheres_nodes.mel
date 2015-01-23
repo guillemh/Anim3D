@@ -1,0 +1,22 @@
+string $sphere1[] = `polySphere -r 1`;
+// Result: pSphere1 polySphere1 // 
+string $sphere2[] = `polySphere -r 2`;
+// Result: pSphere2 polySphere2 // 
+string $sphere3[] = `polySphere -r 2`;
+// Result: pSphere3 polySphere3 // 
+move 0 0 5 $sphere3;
+
+polyTriangulate -ch 1 $sphere1;
+polyTriangulate -ch 1 $sphere2;
+polyTriangulate -ch 1 $sphere3;
+
+createNode greenDeformer;
+
+connectAttrToAttrOverride("pSphereShape2.outMesh", "greenDeformer1.inCage");
+connectAttr -force pSphereShape2.outMesh greenDeformer1.inCage;
+
+connectAttrToAttrOverride("pSphereShape1.outMesh", "greenDeformer1.inMesh");
+connectAttr -force pSphereShape1.outMesh greenDeformer1.inMesh;
+
+connectAttrToAttrOverride("greenDeformer1.outMesh", "pSphereShape3.inMesh");
+connectAttr -force greenDeformer1.outMesh pSphereShape3.inMesh;
