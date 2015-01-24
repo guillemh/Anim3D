@@ -11,6 +11,8 @@ setAttr "polySurface1800.visibility" 0;
 // Create cage
 polyCube -ch on -o on -ax 0 1 0 -w 5.934066 -h 9.230769 -d 2.912088 -cuv 4 ;
 // Result: pCube1 polyCube1 // 
+
+move -r 0 4.67033 0 ;
 setAttr "polyCube1.subdivisionsHeight" 3;
 select -r pCube1.e[24] ;
 select -tgl pCube1.e[1] ;
@@ -30,6 +32,8 @@ select -r pCube1.f[12] ;
 polyExtrudeFacet -constructionHistory 1 -keepFacesTogether 1 -pvx -2.912087854 -pvy 5.657169617 -pvz 0.521978022 -divisions 1 -twist 0 -taper 1 -off 0 -thickness 0 -smoothingAngle 30 pCube1.f[12];
 // Result: polyExtrudeFace2 // 
 setAttr "polyExtrudeFace2.localTranslate" -type double3 0 0 2.083978 ;
+polyTriangulate -ch 1 pCube1;
+// Result: polyTriangulate1 // 
 
 createNode greenDeformer;
 // Result: greenDeformer1 // 

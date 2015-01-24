@@ -170,6 +170,7 @@ MStatus greenDeformer::compute(const MPlug& plug, MDataBlock& data)
 					}
 					MVector n;
 					cageMesh.getPolygonNormal(j, n);
+					n.normalize();
 					MVector p = (v[0] * n)*n;
 					int sign[3];
 					double I[3];
@@ -201,16 +202,16 @@ MStatus greenDeformer::compute(const MPlug& plug, MDataBlock& data)
 						}
 				}
 			}
-
+			// Formule (14)
 			for (int i = 0; i < numPoly; i++){
 				cageMesh.getPolygonVertices(i, vertexList);
 				u[i] = cagePoints[vertexList[1]] - cagePoints[vertexList[0]];
-				v[i] = cagePoints[vertexList[2]] - cagePoints[vertexList[1]];
+				v[i] = cagePoints[vertexList[2]] - cagePoints[vertexList[0]];
 				area[i] = 0.5*(u[i] ^ v[i]).length();
 			}
 			weight_initialized = true;
 		}
-
+		// Formule (14)
 		MFloatArray s;
 		MVectorArray up;
 		MVectorArray vp;
@@ -218,17 +219,22 @@ MStatus greenDeformer::compute(const MPlug& plug, MDataBlock& data)
 		for (int i = 0; i < numPoly; i++) {
 			cageMesh.getPolygonVertices(i, vertexList);
 			up.append(cagePoints[vertexList[1]] - cagePoints[vertexList[0]]);
-			vp.append(cagePoints[vertexList[2]] - cagePoints[vertexList[1]]);
+			vp.append(cagePoints[vertexList[2]] - cagePoints[vertexList[0]]);
 			s.append(sqrt(pow(up[i].length()*v[i].length(), 2) + pow(u[i].length()*vp[i].length(), 2) - 2 * (up[i] * vp[i]) * (u[i] * v[i])) / (SQRT_8 * area[i]));
 		}
+
+		// Formule (4)
 		for (int i = 0; i < numPoints; i++) {
 			MPoint eta;
 			for (int j = 0; j < numPoly; j++) {
-				MVector n = up[j] ^ vp[j];
+				MVector n;
+				cageMesh.getPolygonNormal(j, n);
 				n.normalize();
 				eta += MPoint(n) * psi[j][i] * s[j];
+				cageMesh.getPolygonVertices(j, vertexList);
 				for (int l = 0; l < 3; l++) {
-					eta += MPoint(vp[j]) * (phi[j][i][l]);
+					MVector vert = cagePoints[vertexList[l]];
+					eta += MPoint(vert) * (phi[j][i][l]);
 				}
 			}
 			vertex_array.append(eta);
