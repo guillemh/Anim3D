@@ -1,5 +1,6 @@
 #include <maya/MPxNode.h>
 #include <maya/MTypeId.h> 
+#include <maya/MPointArray.h>
 
 class greenDeformer
   : public MPxNode
@@ -33,10 +34,13 @@ public:
 
 private:
 	bool weight_initialized;
-	float ***phi;
-	float **psi;
+	double ***phi;
+	double **psi;
 	MVector *u;
 	MVector *v;
 	double *area;
+	MPointArray vertex_array;
+
+	MObject createCube(MObject& outData, MStatus& stat);
 };
 
