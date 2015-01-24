@@ -1,0 +1,47 @@
+// OFF file parser
+select -all;
+doDelete;
+{
+	$fileName = "D:/Maya_tutorial/data/tux_lowres.off";
+	//$fileName = `fileDialog2 -fileMode 1 -fileFilter ("OFF file (*.off)")`;	
+	$fileId = fopen($fileName,"r");
+	
+	// Read keyword OFF
+	string $word = `fgetword $fileId`;
+	if ($word != "OFF") 
+	{
+		// problem
+	}
+	
+	// Read numbers of points and faces
+	string $sNbPoints = `fgetword $fileId`;
+	int $nbPoints = (int)$sNbPoints;
+	string $sNbFaces = `fgetword $fileId`;
+	int $nbFaces = (int)$sNbFaces;
+	$word = `fgetword $fileId`;
+
+	// Parse through the points
+	float $points[];
+	int $i;
+	for ($i = 0; $i < 3*$nbPoints; $i++)
+	{
+		$word = `fgetword $fileId`;
+		$points[$i] = (float)$word;
+	}
+	
+	// Parse through the faces
+	int $f0, $f1, $f2;
+	for ($i = 0; $i < $nbFaces; $i++)
+	{
+		// Nb of vertices
+		$word = `fgetword $fileId`;
+		// Vertices indexes
+		$word = `fgetword $fileId`;
+		$f0 = (int)$word;
+		$word = `fgetword $fileId`;
+		$f1 = (int)$word;
+		$word = `fgetword $fileId`;
+		$f2 = (int)$word;
+		polyCreateFacet -p $points[3*$f0] $points[3*$f0+1] $points[3*$f0+2] -p $points[3*$f1] $points[3*$f1+1] $points[3*$f1+2] -p $points[3*$f2] $points[3*$f2+1] $points[3*$f2+2];
+	}
+}
