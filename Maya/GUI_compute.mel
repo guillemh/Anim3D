@@ -1,0 +1,18 @@
+// GUI to compute the weights
+select -all;
+doDelete;
+
+// a function to be called when the button gets clicked.
+proc func() {
+	print("Green weights computed\n");
+}
+
+// create a window
+window;
+	// define the layout of controls added 
+	// to the window.
+	columnLayout;
+		// create a button
+		button -label "Compute weights" -command "func";
+// show the window we last created
+showWindow;

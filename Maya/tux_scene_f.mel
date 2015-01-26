@@ -1,0 +1,17 @@
+// Load tux_cage_f.mel
+
+// Link the meshes to greenDeformer node
+createNode greenDeformer;
+// Result: greenDeformer1 // 
+
+connectAttrToAttrOverride("polySurfaceShape1800.outMesh", "greenDeformer1.inMesh");
+connectAttr -force polySurfaceShape1800.outMesh greenDeformer1.inMesh;
+// Result: Connected polySurfaceShape1800.outMesh to greenDeformer1.inMesh. // 
+
+connectAttrToAttrOverride("pCubeShape1.outMesh", "greenDeformer1.inCage");
+connectAttr -force pCubeShape1.outMesh greenDeformer1.inCage;
+// Result: Connected pCubeShape1.outMesh to greenDeformer1.inCage. // 
+
+connectAttrToAttrOverride("greenDeformer1.outMesh", "polySurfaceShape1801.inMesh");
+connectAttr -force greenDeformer1.outMesh polySurfaceShape1801.inMesh;
+// Result: Connected greenDeformer1.outMesh to polySurfaceShape1801.inMesh. // 
