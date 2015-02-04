@@ -8,7 +8,7 @@
 #include "mesh.h"
 #include "skinning.h"
 
-#define _SKINNING_ON 0
+#define _SKINNING_ON 1
 #define _SKINNING_GPU 0
 
 

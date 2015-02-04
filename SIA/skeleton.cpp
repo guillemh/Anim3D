@@ -228,7 +228,7 @@ void Skeleton::nbDofs() {
 	if (_dofs.empty()) return;
 
 	// Increase tol?
-	double tol = 1e-4;
+	double tol = 5e-2;
 
 	int nbDofsR = 0;
 
@@ -237,7 +237,7 @@ void Skeleton::nbDofs() {
 	int nbFrames = _dofs[0]._values.size();
 	qglviewer::Vec vaaPrec, vaa;
 	double angle, anglePrec;
-	animate(0);
+	//animate(0);
 	eulerToAxisAngle(_curRx, _curRy, _curRz, _rorder, &vaaPrec);
 	anglePrec = vaaPrec.norm();
 	vaaPrec.normalize();
@@ -290,7 +290,7 @@ void Skeleton::nbDofs() {
 
 		double val = (vaaPrec - vaa).norm();
 		if (val > tol) {
-			//nbDofsR = 2;
+			nbDofsR = 2;
 		} else if ((anglePrec - angle) > tol) {
 			nbDofsR = 1;
 		}

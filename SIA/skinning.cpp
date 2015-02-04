@@ -1,4 +1,5 @@
 #include "skinning.h"
+#include <glm/gtx/norm.hpp>
 
 using namespace std;
 
@@ -33,6 +34,12 @@ void Skinning::init() {
 		_transfoInit[i] = _transfoCurr[i];
 		_transfoInitInv[i] = glm::inverse(_transfoInit[i]);
 	}
+	// Dual quaternions transform
+	_dualQuatTransfoInit.resize(_nbJoints);
+	_dualQuatTransfoCurr.resize(_nbJoints);
+	for (unsigned int j = 0; j < _transfoInit.size(); j++) {
+		_dualQuatTransfoInit[j] = _dualQuatTransfoCurr[j];
+	}
 
 	// Get bones pose info :
 	idx = 0;
@@ -40,10 +47,16 @@ void Skinning::init() {
 	getBonesPos(_skel, &idx);
 
 	// Compute weights :
-	if (_meth)
-		computeWeights();
-	else 
+	if (_meth == 1) {
+		computeWeights(_skinningTypes::rigide);
+		cout << "-- rigid skinning weights computed" << endl;
+	} else if (_meth == 2) {
+		computeWeights(_skinningTypes::lisse);
+		cout << "-- smooth skinning weights computed" << endl;
+	} else {
 		loadWeights("data/skinning.txt");
+		cout << "-- weights loaded" << endl;
+	}
 
 	// Test skinning :
 	animate();
@@ -54,10 +67,14 @@ void Skinning::recomputeWeights() {
 	if (_skel==NULL) return;
 
 	// Compute weights :
-	if (_meth) {
-		cout << "computing weights\n";
-		computeWeights();
-		cout << "-- weights computed" << endl;
+	if (_meth == 1) {
+		cout << "computing weights rigid skinning\n";
+		computeWeights(_skinningTypes::rigide);
+		cout << "-- rigid skinning weights computed" << endl;
+	} else if (_meth == 2) {
+		cout << "computing weights smooth skinning\n";
+		computeWeights(_skinningTypes::lisse);
+		cout << "-- smooth skinning weights computed" << endl;
 	} else {
 		cout << "loading weights\n";
 		loadWeights("data/skinning.txt");
@@ -112,28 +129,85 @@ void Skinning::computeTransfo(Skeleton *skel, int *idx) {
 	_transfoCurr[i0] = glm::transpose(_transfoCurr[i0]);
 }
 
+double Skinning::geodesDistance(glm::vec3 vertex, int boneIndex) {
+	glm::vec3 dist;
+	glm::vec3 joint1 = glm::vec3(_transfoInit[boneIndex][3][0], _transfoInit[boneIndex][3][1], _transfoInit[boneIndex][3][2]);
+	int secondIndex;
+	if (boneIndex == _transfoInit.size()-1) {
+		secondIndex = boneIndex-1;
+	} else {
+		secondIndex = boneIndex+1;
+	}
+	glm::vec3 joint2 = glm::vec3(_transfoInit[secondIndex][3][0], _transfoInit[secondIndex][3][1], _transfoInit[secondIndex][3][2]);
+	float norm = glm::gtx::norm::l2Norm(joint2)*glm::gtx::norm::l2Norm(joint2);
+	float p;
+	if (norm != 0) {
+		p = glm::dot((vertex-joint1), (joint2-joint1))/norm;
+	} else {
+		return glm::distance(vertex, joint1);
+	}
+	if (p < 0) {
+		dist = joint1;
+	} else if (p > 1) {
+		dist = joint2;
+	} else {
+		dist = joint1 + (joint2-joint1)*p;
+	}
+	double res = glm::distance(vertex, dist);
+	return glm::distance(vertex, dist);
+}
 
-void Skinning::computeWeights() {
+void Skinning::computeWeights(_skinningTypes skinningType) {
 	if (_skin==NULL) return;
 	if (_skel==NULL) return;
-	// Compute the distance of each vertex of the mesh to all the bones
-	// The nearest bone will be the one to influence the vertex
-	for (int i = 0; i < _nbVtx; i++) {
-		glm::vec4 vertex = _pointsInit[i];
-		double minDist = numeric_limits<double>::infinity();
-		int minBone;
-		for (int j = 0; j < _nbJoints; j++) {
-			// Re-initialize the influence to 0
-			_weights[i][j] = 0;
-			glm::vec4 bone = _posBonesInit[j];
-			double dist = glm::distance(vertex, bone);
-			if (dist < minDist) {
-				minDist = dist;
-				minBone = j;
+
+	switch (skinningType) {
+	case _skinningTypes::rigide :
+		// Skinning rigide
+		// Compute the distance of each vertex of the mesh to all the bones
+		// The nearest bone will be the one to influence the vertex
+		for (int i = 0; i < _nbVtx; i++) {
+			glm::vec4 vertex = _pointsInit[i];
+			double minDist = numeric_limits<double>::infinity();
+			int minBone;
+			for (int j = 0; j < _nbJoints; j++) {
+				// Re-initialize the influence to 0
+				_weights[i][j] = 0;
+				glm::vec4 bone = _posBonesInit[j];
+				glm::vec3 vert = glm::vec3(vertex);
+				//double dist = geodesDistance(vert, j);
+				double dist = glm::distance(vertex, bone);
+				if (dist < minDist) {
+					minDist = dist;
+					minBone = j;
+				}
+			}
+			_weights[i][minBone] = 1;
+		}
+		break;		
+	case _skinningTypes::lisse :
+		// Skinning lisse
+		for (int i = 0; i < _nbVtx; i++) {
+			glm::vec4 vertex = _pointsInit[i];
+			double sumDist = 0;
+			for (int j = 0; j < _nbJoints; j++) {
+				glm::vec4 bone = _posBonesInit[j];
+				glm::vec3 vert = glm::vec3(vertex);
+				double dist = geodesDistance(vert, j);
+				//double dist = glm::distance(vertex, bone);
+				double weight = exp(-dist);
+				_weights[i][j] = weight;
+				sumDist += weight;
+			}
+			for (int j = 0; j < _nbJoints; j++) {
+				_weights[i][j] /= sumDist;
 			}
 		}
-		_weights[i][minBone] = 1;
+		break;
+	default:
+		break;
 	}
+
 }
 
 void Skinning::loadWeights(std::string filename) {
@@ -183,11 +257,7 @@ void Skinning::paintWeights(std::string jointName) {
 	// Color the vertices depending on the joint's weight on them
 	for (int i = 0; i < _nbVtx; i++) {
 		double weight = _weights[i][jointIndex];
-		if (weight == 0) {
-			_skin->_colors[i] = (glm::vec4(0., 0., 0., 1.));
-		} else {
-			_skin->_colors[i] = (glm::vec4(weight, 0., 0., 1.));
-		}
+		_skin->_colors[i] = (glm::vec4(weight, 0., 0., 1.));
 	}
 }
 
@@ -200,6 +270,7 @@ void Skinning::animate() {
 	glPushMatrix();
 	glLoadIdentity();
 	computeTransfo(_skel, &idx);
+	computeDualQuaternionTransform();
 	glPopMatrix();
 
 	// Animate skin :
@@ -209,14 +280,70 @@ void Skinning::animate() {
 #endif
 }
 
+// Question : bon algorithme de mise à jour pour les DQ?
 void Skinning::applySkinning() {
 	// Loop on all the vertices, and change their position
 	// according to the corresponding weights
 	for (int i = 0; i < _nbVtx; i++) {
+		bool dualQuat = false;
+		if (!dualQuat) {
 		glm::vec4 newPos;
 		for (int j = 0; j < _nbJoints; j++) {
 			newPos += _weights[i][j] * _transfoCurr[j] * _transfoInitInv[j] * _pointsInit[i];
 		}
 		_skin->_points[i] = newPos;
+		} else {
+		// With dual quaternions
+		DualQuaternion dq;
+		for (int j = 0; j < _nbJoints; j++) {
+			dq += _weights[i][j] * _dualQuatTransfoCurr[j];
+		}
+		// cf algo1 from paper
+		Quaternion quatC = dq._quat;
+		double norm = quatC.normalize();
+		Quaternion dualC = Quaternion(dq._dual[0] / norm, dq._dual[1] / norm, dq._dual[2] / norm, dq._dual[3] / norm);
+		DualQuaternion dqC = DualQuaternion(quatC, dualC);
+		qglviewer::Vec pos = qglviewer::Vec(_pointsInit[i]);
+		qglviewer::Vec d0 = dqC._quat.axis();
+		qglviewer::Vec dE = dqC._dual.axis();
+		double a0 = dqC._quat.angle();
+		double aE = dqC._dual.angle();
+		pos += 2*d0 ^ (d0^pos + a0*pos) + 2 * (a0*dE - aE*d0 + d0^dE);
+		//if ((qglviewer::Vec(newPos) - pos).norm() > 0.1) {
+		//	cout << "coucou" << endl;
+		//}
+		_skin->_points[i] = glm::vec4(pos.x, pos.y, pos.z, 1.0);
+		}
 	}
 }
+
+// To execute AFTER computeTransfo
+// Questions : 
+// . est-ce qu'on doit bien utiliser transfoCurr pour récupérer les rotations?
+// . c'est bien dans le repère du point?
+// . et c'est bon pour la translation aussi??
+// . et la formule???
+void Skinning::computeDualQuaternionTransform() {
+	for (int jointIndex = 0; jointIndex < _nbJoints; jointIndex++) {
+		// Get the rotation matrix
+		glm::mat3 R = glm::mat3(
+			_transfoCurr[jointIndex][0][0], _transfoCurr[jointIndex][0][1], _transfoCurr[jointIndex][0][2], 
+			_transfoCurr[jointIndex][1][0], _transfoCurr[jointIndex][1][1], _transfoCurr[jointIndex][1][2], 
+			_transfoCurr[jointIndex][2][0], _transfoCurr[jointIndex][2][1], _transfoCurr[jointIndex][2][2]
+		);
+		// Compute the corresponding rotation quaternion
+		Quaternion quat;
+		_skel->matrixToQuaternion(R, &quat);
+		quat.normalize();
+		// Get the translation vector
+		qglviewer::Vec translation = qglviewer::Vec(_transfoCurr[jointIndex][3][0], _transfoCurr[jointIndex][3][1], _transfoCurr[jointIndex][3][2]);
+		// Compute the corresponding dual quaternion
+		float w = -0.5f*( translation.x * quat[0] + translation.y * quat[1] + translation.z * quat[2]);
+		float i =  0.5f*( translation.x * quat[3] + translation.y * quat[2] - translation.z * quat[1]);
+		float j =  0.5f*(-translation.x * quat[2] + translation.y * quat[3] + translation.z * quat[0]);
+		float k =  0.5f*( translation.x * quat[1] - translation.y * quat[0] + translation.z * quat[3]);
+		Quaternion dual(i, j, k, w);
+		_dualQuatTransfoCurr[jointIndex] = DualQuaternion(quat, dual);
+	}
+}
+

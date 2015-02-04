@@ -215,7 +215,7 @@ void Viewer::init()
 
   // Load skeleton :
   _root = NULL;
-  _root = Skeleton::createFromFile("data/walk.bvh");
+  _root = Skeleton::createFromFile("data/run.bvh");
   if (_root->_dofs.size())
 	  _nframes = _root->_dofs[0]._values.size();
   else
@@ -329,7 +329,7 @@ void Viewer::keyPressEvent(QKeyEvent *e)
 			break;
 		case Qt::Key_W :		// Modify computation of weights for skinning
 			if (!_skinning) return;
-			_skinning->_meth = (_skinning->_meth+1)%2;
+			_skinning->_meth = (_skinning->_meth+1)%3;
 			_skinning->recomputeWeights();
 			if (_skinning->_skin->_colors.size()) {
 				cout << "paint weights" << endl;

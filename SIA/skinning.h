@@ -3,10 +3,18 @@
 
 #include "mesh.h"
 #include "skeleton.h"
+#include "DualQuaternion.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <vector>
+
+using qglviewer::Quaternion;
+
+enum _skinningTypes {
+	rigide,
+	lisse
+};
 
 class Skinning
 {
@@ -27,7 +35,10 @@ public :
 	std::vector<glm::vec4> _posBonesInit;			// initial global position of bone
 	std::vector<glm::mat4> _transfoCurr;			// current global transformation of bones
 
-	int _meth;	//method to compute weights 1 : computeWeights(), 0 : load from Maya
+	std::vector<DualQuaternion> _dualQuatTransfoInit;
+	std::vector<DualQuaternion> _dualQuatTransfoCurr;
+
+	int _meth;	//method to compute weights 1 : computeWeights(rigide), 2 : computeWeights(lisse), 0 : load from Maya
 	
 public :
 	Skinning() {
@@ -48,9 +59,11 @@ public :
 	void getBonesPos(Skeleton *skel, int *idx);
 	// build _transfoCurr :
 	void computeTransfo(Skeleton *skel, int *idx);
+	void computeDualQuaternionTransform();
 
 	// build _weights :
-	void computeWeights();					// compute from data
+	double geodesDistance(glm::vec3 vertex, int boneIndex); // compute geodesic distance btw the vertex and the bone
+	void computeWeights(_skinningTypes skinningType);					// compute from data
 	void loadWeights(std::string filename);	// load from file extracted from Maya
 	// re-initialize weights :
 	void recomputeWeights();
