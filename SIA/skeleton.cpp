@@ -2,7 +2,6 @@
 #include <skeletonIO.h>
 #include <qglviewer.h>
 
-
 using namespace std;
 
 Skeleton* Skeleton::createFromFile(std::string fileName) {
@@ -310,4 +309,151 @@ void Skeleton::nbDofs() {
 		_children[ichild]->nbDofs();
 	}
 
+}
+
+void Skeleton::getRotations(vector<vector<double> >& rot) {
+	if (_dofs.empty()) return;
+	size_t nbFrames = _dofs[0]._values.size();
+	for (size_t f = 0; f < rot.size(); f++) {
+		for (size_t i = 0; i < _dofs.size(); i++) {
+			rot[f].push_back(_dofs[i]._values[f]);
+		}
+	}
+
+	for (unsigned int ichild = 0 ; ichild < _children.size() ; ichild++) {
+		_children[ichild]->getRotations(rot);
+	}
+}
+
+int Skeleton::getMotionPeriod() {
+	size_t nbFrames = _dofs[0]._values.size();
+	vector<vector<double> > rot(nbFrames);
+
+	getRotations(rot);
+
+	int frame0 = 0;
+	double angleDiffInit = 0, angleDiffPrec = 0;
+	for (size_t i = 0; i < rot[frame0+2].size(); i++) {
+		angleDiffInit += (rot[frame0+1][i]-rot[frame0+0][i])*(rot[frame0+1][i]-rot[frame0+0][i]);
+		angleDiffPrec += (rot[frame0+2][i]-rot[frame0+0][i])*(rot[frame0+2][i]-rot[frame0+0][i]);
+	}
+	double sign = angleDiffPrec - angleDiffInit;
+
+	size_t frame = frame0+3;
+	vector<int> signChanges;
+	while (frame < nbFrames) {
+		double angleDiff = 0;
+		for (size_t i = 0; i < rot[frame].size(); i++) {
+			angleDiff += (rot[frame][i]-rot[0][i])*(rot[frame][i]-rot[0][i]);
+		}
+
+		// Detection of the change of sign
+		if ((angleDiff-angleDiffPrec) * sign < 0) {
+			// There's been a change of sign
+			if (signChanges.empty()) {
+				// First change
+				signChanges.push_back(frame);
+				sign = angleDiff - angleDiffPrec;
+			} else {
+				int lastChange = signChanges[signChanges.size()-1];
+				if (frame-lastChange < 3) {
+					// If change too soon, it's noise :
+					// the last change was false
+					signChanges.pop_back();
+					sign *= -1;
+				} else {
+					signChanges.push_back(frame);
+					sign = angleDiff - angleDiffPrec;
+				}
+			}
+
+		}
+		frame++;
+		angleDiffPrec = angleDiff;
+	}
+	if (signChanges.size() < 2) {
+		return 0;
+	} else if (signChanges.size() < 3) {
+		return 2*(signChanges[1] - signChanges[0]);
+	} else {
+		return (signChanges[2] - signChanges[0]);
+	}
+}
+
+int Skeleton::getMotionBegin() {
+	size_t nbFrames = _dofs[0]._values.size();
+	// Look at the positions of the left feet, take the minimal one
+	// Get all the offsets until the foot
+	std::vector<glm::vec4> footOffsets;
+	Skeleton* cur = this;
+	while (cur->_name.compare("End")) {
+		footOffsets.push_back(glm::vec4(cur->_offX, cur->_offY, cur->_offZ, 1.0));
+		cur = cur->_children[0];
+	}
+
+	// Compute the position of the foot for each frame
+	std::vector<glm::vec4> footPositions;
+	int jointIndex = 0;
+	for (size_t f = 0; f < nbFrames; f++) {
+		cur = this;
+		jointIndex = 0;
+		glm::vec4 initPos = glm::vec4(0.0, 0.0, 0.0, 1.0);
+		double rx, ry, rz;
+		for (size_t i = 0; i < cur->_dofs.size(); i++) {
+			if(!cur->_dofs[i].name.compare("Zrotation")) rz = cur->_dofs[i]._values[f];
+			if(!cur->_dofs[i].name.compare("Yrotation")) ry = cur->_dofs[i]._values[f];
+			if(!cur->_dofs[i].name.compare("Xrotation")) rx = cur->_dofs[i]._values[f];
+			if(!cur->_dofs[i].name.compare("Zposition")) initPos.z = cur->_dofs[i]._values[f];
+			if(!cur->_dofs[i].name.compare("Yposition")) initPos.y = cur->_dofs[i]._values[f];
+			if(!cur->_dofs[i].name.compare("Xposition")) initPos.x = cur->_dofs[i]._values[f];
+		}
+		glm::vec4 footPos = initPos;
+		glm::mat3 R;
+		eulerToMatrix(M_PI*rx/180.0, M_PI*ry/180.0, M_PI*rz/180.0, RotateOrder::roXYZ, &R);
+		glm::mat4 transfo = glm::mat4(R);
+		transfo[3] = footOffsets[jointIndex];
+		jointIndex++;
+		transfo = glm::transpose(transfo);
+		footPos = transfo*footPos;
+		cur = cur->_children[0];
+		while (cur->_name.compare("End")) {
+			for (size_t i = 0; i < cur->_dofs.size(); i++) {
+				if(!cur->_dofs[i].name.compare("Zrotation")) rz = cur->_dofs[i]._values[f];
+				if(!cur->_dofs[i].name.compare("Yrotation")) ry = cur->_dofs[i]._values[f];
+				if(!cur->_dofs[i].name.compare("Xrotation")) rx = cur->_dofs[i]._values[f];
+			}
+			glm::mat3 R;
+			eulerToMatrix(M_PI*rx/180.0, M_PI*ry/180.0, M_PI*rz/180.0, RotateOrder::roXYZ, &R);
+			glm::mat4 transfo = glm::mat4(R);
+			transfo[3] = footOffsets[jointIndex];
+			jointIndex++;
+			transfo = glm::transpose(transfo);
+			footPos = transfo*footPos;
+			cur = cur->_children[0];
+		}
+		footPositions.push_back(footPos - initPos);
+	}
+
+	// Search the minimum of the Z position of the foot over all the frames
+	int frameMinPos = 0;
+	double minY = std::numeric_limits<double>::max();
+	for (size_t f = 0; f < nbFrames; f++) {
+		double yPos = footPositions[f].y;
+		cout << f << " : " << yPos << "; ";
+		if (footPositions[f].y < minY) {
+			minY = footPositions[f].y;
+			frameMinPos = f;
+			cout << endl;
+		}
+	}
+	cout << endl;
+
+	// Look for the first frame close enough to the min
+	double tol = 0.01;
+	for (size_t f = 0; f < nbFrames; f++) {
+		if (abs(footPositions[f].y - minY) < tol) {
+			return f;
+		}
+	}
+	return frameMinPos;
 }

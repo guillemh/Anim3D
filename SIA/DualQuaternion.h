@@ -9,6 +9,7 @@ public:
 	~DualQuaternion(void);
 
 	DualQuaternion(Quaternion quat, Quaternion dual);
+	DualQuaternion(const DualQuaternion& dq);
 
 	void normalize();
 	void conjugate();

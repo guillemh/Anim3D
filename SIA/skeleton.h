@@ -11,6 +11,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+using std::vector;
+
 class AnimCurve {
 public :
 	AnimCurve() {};
@@ -84,6 +86,13 @@ public :
 	static void quaternionToAxisAngle(qglviewer::Quaternion q, qglviewer::Vec *vaa);
 	static void eulerToAxisAngle(double rx, double ry, double rz, int rorder, qglviewer::Vec *vaa);
 	void nbDofs();
+
+	// Determines the period of the movement in number of frames
+	int getMotionPeriod();
+	// Determines the frame at which a period begins
+	int getMotionBegin();
+	// Recursive : set the matrix of all rotations on the joints at all frames
+	void getRotations(vector<vector<double> >& rot);
 };
 
 

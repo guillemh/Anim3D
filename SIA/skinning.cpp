@@ -285,64 +285,61 @@ void Skinning::applySkinning() {
 	// Loop on all the vertices, and change their position
 	// according to the corresponding weights
 	for (int i = 0; i < _nbVtx; i++) {
-		bool dualQuat = false;
-		if (!dualQuat) {
-		glm::vec4 newPos;
-		for (int j = 0; j < _nbJoints; j++) {
-			newPos += _weights[i][j] * _transfoCurr[j] * _transfoInitInv[j] * _pointsInit[i];
+		bool dualQuat = true;
+		//if (!dualQuat) {
+			glm::vec4 newPos;
+			for (int j = 0; j < _nbJoints; j++) {
+				newPos += _weights[i][j] * _transfoCurr[j] * _transfoInitInv[j] * _pointsInit[i];
+			}
+			_skin->_points[i] = newPos;
+		//} else {
+			// With dual quaternions
+			DualQuaternion dq;
+			for (int j = 0; j < _nbJoints; j++) {
+				dq += _weights[i][j] * _dualQuatTransfoCurr[j];
+			}
+			// cf algo1 from paper
+			Quaternion c0 = dq._quat;
+			double norm = c0.normalize();
+			Quaternion cE = Quaternion(dq._dual[0] / norm, dq._dual[1] / norm, dq._dual[2] / norm, dq._dual[3] / norm);
+			qglviewer::Vec pos = qglviewer::Vec(_pointsInit[i]);
+			qglviewer::Vec d0 = c0.axis();
+			qglviewer::Vec dE = cE.axis();
+			double a0 = c0.angle();
+			double aE = cE.angle();
+			pos += 2*d0 ^ (d0^pos + a0*pos) + 2 * (a0*dE - aE*d0 + d0^dE);
+		/*	if ((qglviewer::Vec(newPos) - pos).norm() > 0.1) {
+				cout << "coucou" << endl;
+			}*/
+			_skin->_points[i] = glm::vec4(pos.x, pos.y, pos.z, 1.0);
 		}
-		_skin->_points[i] = newPos;
-		} else {
-		// With dual quaternions
-		DualQuaternion dq;
-		for (int j = 0; j < _nbJoints; j++) {
-			dq += _weights[i][j] * _dualQuatTransfoCurr[j];
-		}
-		// cf algo1 from paper
-		Quaternion quatC = dq._quat;
-		double norm = quatC.normalize();
-		Quaternion dualC = Quaternion(dq._dual[0] / norm, dq._dual[1] / norm, dq._dual[2] / norm, dq._dual[3] / norm);
-		DualQuaternion dqC = DualQuaternion(quatC, dualC);
-		qglviewer::Vec pos = qglviewer::Vec(_pointsInit[i]);
-		qglviewer::Vec d0 = dqC._quat.axis();
-		qglviewer::Vec dE = dqC._dual.axis();
-		double a0 = dqC._quat.angle();
-		double aE = dqC._dual.angle();
-		pos += 2*d0 ^ (d0^pos + a0*pos) + 2 * (a0*dE - aE*d0 + d0^dE);
-		//if ((qglviewer::Vec(newPos) - pos).norm() > 0.1) {
-		//	cout << "coucou" << endl;
-		//}
-		_skin->_points[i] = glm::vec4(pos.x, pos.y, pos.z, 1.0);
-		}
-	}
+	//}
 }
 
 // To execute AFTER computeTransfo
-// Questions : 
-// . est-ce qu'on doit bien utiliser transfoCurr pour récupérer les rotations?
-// . c'est bien dans le repère du point?
-// . et c'est bon pour la translation aussi??
-// . et la formule???
 void Skinning::computeDualQuaternionTransform() {
 	for (int jointIndex = 0; jointIndex < _nbJoints; jointIndex++) {
 		// Get the rotation matrix
-		glm::mat3 R = glm::mat3(
-			_transfoCurr[jointIndex][0][0], _transfoCurr[jointIndex][0][1], _transfoCurr[jointIndex][0][2], 
-			_transfoCurr[jointIndex][1][0], _transfoCurr[jointIndex][1][1], _transfoCurr[jointIndex][1][2], 
-			_transfoCurr[jointIndex][2][0], _transfoCurr[jointIndex][2][1], _transfoCurr[jointIndex][2][2]
-		);
+		glm::mat3 R = glm::mat3(_transfoCurr[jointIndex]);
 		// Compute the corresponding rotation quaternion
 		Quaternion quat;
 		_skel->matrixToQuaternion(R, &quat);
 		quat.normalize();
 		// Get the translation vector
-		qglviewer::Vec translation = qglviewer::Vec(_transfoCurr[jointIndex][3][0], _transfoCurr[jointIndex][3][1], _transfoCurr[jointIndex][3][2]);
+		glm::mat4 tr = glm::transpose(_transfoCurr[jointIndex]);
+		qglviewer::Vec translation = qglviewer::Vec(tr[3][0], tr[3][1], tr[3][2]);
 		// Compute the corresponding dual quaternion
+		Quaternion dual = Quaternion(translation.x, translation.y, translation.z, 0.0) * quat;
+		for (int i = 0; i < 4; i++) {
+			dual[i] *= 0.5f;
+		}
+		/*
 		float w = -0.5f*( translation.x * quat[0] + translation.y * quat[1] + translation.z * quat[2]);
 		float i =  0.5f*( translation.x * quat[3] + translation.y * quat[2] - translation.z * quat[1]);
 		float j =  0.5f*(-translation.x * quat[2] + translation.y * quat[3] + translation.z * quat[0]);
 		float k =  0.5f*( translation.x * quat[1] - translation.y * quat[0] + translation.z * quat[3]);
 		Quaternion dual(i, j, k, w);
+		*/
 		_dualQuatTransfoCurr[jointIndex] = DualQuaternion(quat, dual);
 	}
 }

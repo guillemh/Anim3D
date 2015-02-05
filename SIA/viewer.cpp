@@ -215,7 +215,9 @@ void Viewer::init()
 
   // Load skeleton :
   _root = NULL;
-  _root = Skeleton::createFromFile("data/run.bvh");
+  _root = Skeleton::createFromFile("data/walk.bvh");
+  cout << "MinY : " << _root->getMotionBegin() << endl;
+  cout << "Period : " << _root->getMotionPeriod() << endl;
   if (_root->_dofs.size())
 	  _nframes = _root->_dofs[0]._values.size();
   else
