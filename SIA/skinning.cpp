@@ -8,6 +8,7 @@ void Skinning::init() {
 	if (_skel==NULL) return;
 
 	// Compute number of joints :
+    _joints.clear();
 	getJoints(_skel);
 	_nbJoints = _joints.size();
 

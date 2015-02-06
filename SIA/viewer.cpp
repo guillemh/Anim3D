@@ -1,5 +1,6 @@
 #include "viewer.h"
 #include <qfiledialog.h>
+#include <algorithm>
 
 using namespace std;
 
@@ -203,6 +204,116 @@ void Viewer::animate()
 	if (_skinning) _skinning->animate();
 }
 
+double Viewer::interpolationFunction(double initialPoint, double finalPoint, unsigned int currentFrame, unsigned int maximumFrame, _interpolationTypes interpolationType = linear)
+{
+	if (currentFrame > maximumFrame)
+	{
+		std::cout << "Erreur : currentFrame trop eleve" << std::endl;
+	}
+	double max = maximumFrame;
+	double interpolationParameterRatio = currentFrame / max;
+	switch (interpolationType)
+	{
+	case linear:
+		break;
+	case smoothstep:
+		interpolationParameterRatio = interpolationParameterRatio * interpolationParameterRatio * (3 - 2 * interpolationParameterRatio);
+		break;
+	case smootherstep:
+		interpolationParameterRatio = interpolationParameterRatio * interpolationParameterRatio * interpolationParameterRatio * (interpolationParameterRatio * (interpolationParameterRatio * 6 - 15) + 10);
+		break;
+	default:
+		break;
+	}
+	return (1 - interpolationParameterRatio) * initialPoint + interpolationParameterRatio * finalPoint;
+}
+
+void Viewer::applyInterpolation(Skeleton* initialSkeletonInitialState, unsigned int initialPeriodFrames, unsigned int initialBestStartFrame,
+	Skeleton* initialSkeletonFinalState, unsigned int finalPeriodFrames, unsigned int finalBestStartFrame,
+	Skeleton* finalSkeleton, unsigned int beginningFrame)
+{
+	// TODO : VERIFIER QUE TOUTES LES FRAMES ET SQUELETTES SONT BIEN COHERENTS
+	// TODO : DUPLIQUER TOUT CA POUR AVOIR PLUS QUE DEUX PERIODES
+	if (initialSkeletonInitialState->_dofs.size())
+	{
+		// On interpole linéairement entre les deux squelettes
+		double newFrequencyRatio = ((double)initialPeriodFrames) / ((double)finalPeriodFrames);
+		double oldFrequencyRatio = ((double)finalPeriodFrames) / ((double)initialPeriodFrames);
+		for (unsigned int currentDoF = 0; currentDoF < initialSkeletonInitialState->_dofs.size(); currentDoF++)
+		{
+			std::vector<double> initialFunction = initialSkeletonInitialState->_dofs[currentDoF]._values;
+			std::vector<double> finalFunction = initialSkeletonFinalState->_dofs[currentDoF]._values;
+			finalSkeleton->_dofs[currentDoF]._values.resize(finalFunction.size() + beginningFrame - finalBestStartFrame);
+			//finalSkeleton->_dofs[currentDoF]._values.resize(beginningFrame + finalPeriodFrames);
+			for (unsigned int currentFrame = 0;
+				currentFrame < beginningFrame && currentFrame < initialFunction.size();
+				currentFrame++)
+			{
+				finalSkeleton->_dofs[currentDoF]._values[currentFrame] = initialFunction[currentFrame];
+			}
+			for (unsigned int currentFrame = beginningFrame;
+				currentFrame < beginningFrame + 2*finalPeriodFrames &&
+				((unsigned int)(newFrequencyRatio * (currentFrame - beginningFrame)) + initialBestStartFrame) < initialFunction.size() &&
+				(currentFrame - beginningFrame + finalBestStartFrame) < finalFunction.size();
+				currentFrame++)
+			{
+				finalSkeleton->_dofs[currentDoF]._values[currentFrame] = Viewer::interpolationFunction(
+					initialFunction[((unsigned int) Viewer::interpolationFunction(currentFrame - beginningFrame, newFrequencyRatio * (currentFrame - beginningFrame), currentFrame - beginningFrame, 2*finalPeriodFrames, smoothstep) + initialBestStartFrame)],
+					finalFunction[(unsigned int) Viewer::interpolationFunction(oldFrequencyRatio * (currentFrame - beginningFrame), currentFrame - beginningFrame, currentFrame - beginningFrame, 2*finalPeriodFrames, smoothstep) + finalBestStartFrame],
+					currentFrame - beginningFrame, 2*finalPeriodFrames, linear);
+			}
+			for (unsigned int currentFrame = beginningFrame + 2*finalPeriodFrames;
+				currentFrame < finalFunction.size() + beginningFrame - finalBestStartFrame;
+				currentFrame++)
+			{
+				finalSkeleton->_dofs[currentDoF]._values[currentFrame] = finalFunction[currentFrame - beginningFrame + finalBestStartFrame];
+			}
+		}
+	}
+	// On interpole les squelettes fils
+	for (unsigned int ichild = 0; ichild < finalSkeleton->_children.size(); ichild++)
+	{
+		applyInterpolation(initialSkeletonInitialState->_children[ichild], initialPeriodFrames, initialBestStartFrame,
+			initialSkeletonFinalState->_children[ichild], finalPeriodFrames, finalBestStartFrame,
+			finalSkeleton->_children[ichild], beginningFrame);
+	}
+}
+
+void Viewer::duplicateSkeleton(Skeleton* skeletonToBeDuplicated, unsigned int beginningFrame, unsigned int endFrame)
+{
+	unsigned int maxDoF = skeletonToBeDuplicated->_dofs.size();
+	if (beginningFrame > endFrame)
+	{
+		std::cout << "Erreur : Les frames a dupliquer dans le squelette n'existent pas" << std::endl;
+	}
+	if (maxDoF)
+	{
+		unsigned int lastFrame = skeletonToBeDuplicated->_dofs[0]._values.size() - 1;
+		// On duplique les frames du squelette 
+		for (unsigned int currentDoF = 0; currentDoF < maxDoF; currentDoF++)
+		{
+			std::vector<double> skeletonValues = skeletonToBeDuplicated->_dofs[currentDoF]._values;
+			for (unsigned int currentFrame = beginningFrame; currentFrame < endFrame; currentFrame++)
+			{
+				if (maxDoF > 3 && currentDoF < 3)
+				{
+					// Il faut modifier le squelette pour lui associer le mouvement de translation
+					skeletonToBeDuplicated->_dofs[currentDoF]._values.push_back(skeletonValues[currentFrame] + skeletonValues[lastFrame] - skeletonValues[beginningFrame]);
+				}
+				else
+				{
+					skeletonToBeDuplicated->_dofs[currentDoF]._values.push_back(skeletonValues[currentFrame]);
+				}
+			}
+		}
+	}
+	// On applique la duplication aux fils
+	for (unsigned int ichild = 0; ichild < skeletonToBeDuplicated->_children.size(); ichild++)
+	{
+		duplicateSkeleton(skeletonToBeDuplicated->_children[ichild], beginningFrame, endFrame);
+	}
+}
+
 void Viewer::init()
 {
   // Restore previous viewer state.
@@ -215,9 +326,15 @@ void Viewer::init()
 
   // Load skeleton :
   _root = NULL;
-  _root = Skeleton::createFromFile("data/walk.bvh");
-  cout << "MinY : " << _root->getMotionBegin() << endl;
-  cout << "Period : " << _root->getMotionPeriod() << endl;
+  Skeleton* skelInit = Skeleton::createFromFile("data/walk.bvh");
+  duplicateSkeleton(skelInit, 70, 70 + 137);
+  Skeleton* skelFinal = Skeleton::createFromFile("data/run.bvh");
+  duplicateSkeleton(skelFinal, 80, 80 + 80);
+  Skeleton* skelRes = Skeleton::createFromFile("data/walk.bvh");
+  applyInterpolation(skelInit, 137, 23,
+	  skelFinal, 80, 57,
+	  skelRes, 23);
+  _root = skelRes;
   if (_root->_dofs.size())
 	  _nframes = _root->_dofs[0]._values.size();
   else
@@ -320,12 +437,15 @@ void Viewer::keyPressEvent(QKeyEvent *e)
 				_nframes = 0;
 			_iframe = 0;
 			_root->nbDofs();
+#if _SKINNING_ON
 			_skinning->_skel = _root;
+			_skinning->init();
 			_skinning->recomputeWeights();
 			if (_skinning->_skin->_colors.size()) {
 				cout << "paint weights" << endl;
 				_skinning->paintWeights(jointNameCol);
 			}
+#endif
 			animate();
 			updateGL();
 			break;
