@@ -8,7 +8,7 @@ public:
 	DualQuaternion(void);
 	~DualQuaternion(void);
 
-	DualQuaternion(Quaternion quat, Quaternion dual);
+	DualQuaternion(const Quaternion& quat, const Quaternion& dual);
 	DualQuaternion(const DualQuaternion& dq);
 
 	void normalize();
@@ -21,5 +21,6 @@ public:
 	Quaternion _dual;
 };
 
-DualQuaternion operator+(const DualQuaternion & a, const DualQuaternion & b);
+DualQuaternion operator+(const DualQuaternion & dq1, const DualQuaternion & dq2);
 DualQuaternion operator*(double scalar, const DualQuaternion & dq);
+DualQuaternion operator*(const DualQuaternion & dq1, const DualQuaternion & dq2);

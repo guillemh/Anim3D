@@ -87,12 +87,12 @@ public :
 	static void eulerToAxisAngle(double rx, double ry, double rz, int rorder, qglviewer::Vec *vaa);
 	void nbDofs();
 
+	// Recursive : set the matrix of all rotations on the joints at all frames
+	void getRotations(vector<vector<double> >& rot);
 	// Determines the period of the movement in number of frames
 	int getMotionPeriod();
 	// Determines the frame at which a period begins
 	int getMotionBegin();
-	// Recursive : set the matrix of all rotations on the joints at all frames
-	void getRotations(vector<vector<double> >& rot);
 };
 
 

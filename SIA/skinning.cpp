@@ -8,7 +8,7 @@ void Skinning::init() {
 	if (_skel==NULL) return;
 
 	// Compute number of joints :
-    _joints.clear();
+	_joints.clear();
 	getJoints(_skel);
 	_nbJoints = _joints.size();
 
@@ -40,6 +40,7 @@ void Skinning::init() {
 	_dualQuatTransfoCurr.resize(_nbJoints);
 	for (unsigned int j = 0; j < _transfoInit.size(); j++) {
 		_dualQuatTransfoInit[j] = _dualQuatTransfoCurr[j];
+		DualQuaternion inv = _dualQuatTransfoInit[j];
 	}
 
 	// Get bones pose info :
@@ -140,7 +141,7 @@ double Skinning::geodesDistance(glm::vec3 vertex, int boneIndex) {
 		secondIndex = boneIndex+1;
 	}
 	glm::vec3 joint2 = glm::vec3(_transfoInit[secondIndex][3][0], _transfoInit[secondIndex][3][1], _transfoInit[secondIndex][3][2]);
-	float norm = glm::gtx::norm::l2Norm(joint2)*glm::gtx::norm::l2Norm(joint2);
+	float norm = glm::gtx::norm::l2Norm(joint2-joint1)*glm::gtx::norm::l2Norm(joint2-joint1);
 	float p;
 	if (norm != 0) {
 		p = glm::dot((vertex-joint1), (joint2-joint1))/norm;
@@ -152,9 +153,8 @@ double Skinning::geodesDistance(glm::vec3 vertex, int boneIndex) {
 	} else if (p > 1) {
 		dist = joint2;
 	} else {
-		dist = joint1 + (joint2-joint1)*p;
+		dist = joint1 + p*(joint2-joint1);
 	}
-	double res = glm::distance(vertex, dist);
 	return glm::distance(vertex, dist);
 }
 
@@ -286,35 +286,32 @@ void Skinning::applySkinning() {
 	// Loop on all the vertices, and change their position
 	// according to the corresponding weights
 	for (int i = 0; i < _nbVtx; i++) {
-		bool dualQuat = true;
-		//if (!dualQuat) {
+		if (!_DUAL_QUAT) {
 			glm::vec4 newPos;
 			for (int j = 0; j < _nbJoints; j++) {
 				newPos += _weights[i][j] * _transfoCurr[j] * _transfoInitInv[j] * _pointsInit[i];
 			}
 			_skin->_points[i] = newPos;
-		//} else {
+		} else {
 			// With dual quaternions
 			DualQuaternion dq;
 			for (int j = 0; j < _nbJoints; j++) {
-				dq += _weights[i][j] * _dualQuatTransfoCurr[j];
+				dq += (_weights[i][j] * (_dualQuatTransfoCurr[j]*_dualQuatTransfoInit[j]));
 			}
 			// cf algo1 from paper
 			Quaternion c0 = dq._quat;
 			double norm = c0.normalize();
 			Quaternion cE = Quaternion(dq._dual[0] / norm, dq._dual[1] / norm, dq._dual[2] / norm, dq._dual[3] / norm);
-			qglviewer::Vec pos = qglviewer::Vec(_pointsInit[i]);
-			qglviewer::Vec d0 = c0.axis();
-			qglviewer::Vec dE = cE.axis();
-			double a0 = c0.angle();
-			double aE = cE.angle();
+			qglviewer::Vec d0 = qglviewer::Vec(c0[0], c0[1], c0[2]);
+			qglviewer::Vec dE = qglviewer::Vec(cE[0], cE[1], cE[2]);
+			double a0 = c0[3];
+			double aE = cE[3];
+
+			qglviewer::Vec pos = qglviewer::Vec(_pointsInit[i].x, _pointsInit[i].y, _pointsInit[i].z);
 			pos += 2*d0 ^ (d0^pos + a0*pos) + 2 * (a0*dE - aE*d0 + d0^dE);
-		/*	if ((qglviewer::Vec(newPos) - pos).norm() > 0.1) {
-				cout << "coucou" << endl;
-			}*/
 			_skin->_points[i] = glm::vec4(pos.x, pos.y, pos.z, 1.0);
 		}
-	//}
+	}
 }
 
 // To execute AFTER computeTransfo
@@ -326,21 +323,16 @@ void Skinning::computeDualQuaternionTransform() {
 		Quaternion quat;
 		_skel->matrixToQuaternion(R, &quat);
 		quat.normalize();
+
 		// Get the translation vector
-		glm::mat4 tr = glm::transpose(_transfoCurr[jointIndex]);
-		qglviewer::Vec translation = qglviewer::Vec(tr[3][0], tr[3][1], tr[3][2]);
+		qglviewer::Vec translation = qglviewer::Vec(_transfoCurr[jointIndex][3][0], _transfoCurr[jointIndex][3][1], _transfoCurr[jointIndex][3][2]);
+
 		// Compute the corresponding dual quaternion
-		Quaternion dual = Quaternion(translation.x, translation.y, translation.z, 0.0) * quat;
+		Quaternion dual = Quaternion(translation, 0.0) * quat;
 		for (int i = 0; i < 4; i++) {
 			dual[i] *= 0.5f;
 		}
-		/*
-		float w = -0.5f*( translation.x * quat[0] + translation.y * quat[1] + translation.z * quat[2]);
-		float i =  0.5f*( translation.x * quat[3] + translation.y * quat[2] - translation.z * quat[1]);
-		float j =  0.5f*(-translation.x * quat[2] + translation.y * quat[3] + translation.z * quat[0]);
-		float k =  0.5f*( translation.x * quat[1] - translation.y * quat[0] + translation.z * quat[3]);
-		Quaternion dual(i, j, k, w);
-		*/
+		
 		_dualQuatTransfoCurr[jointIndex] = DualQuaternion(quat, dual);
 	}
 }

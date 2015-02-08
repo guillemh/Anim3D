@@ -329,19 +329,29 @@ int Skeleton::getMotionPeriod() {
 	size_t nbFrames = _dofs[0]._values.size();
 	vector<vector<double> > rot(nbFrames);
 
+	// Get all the rotation values for all joints at all frames
 	getRotations(rot);
 
+	// Initialization
+	// What is the first frame we consider
 	int frame0 = 0;
-	double angleDiffInit = 0, angleDiffPrec = 0;
+	// Difference of rotation btw second and first frames
+	double angleDiffInit = 0;
+	// Difference of rotation btw third and first frames
+	double angleDiffPrec = 0;
 	for (size_t i = 0; i < rot[frame0+2].size(); i++) {
 		angleDiffInit += (rot[frame0+1][i]-rot[frame0+0][i])*(rot[frame0+1][i]-rot[frame0+0][i]);
 		angleDiffPrec += (rot[frame0+2][i]-rot[frame0+0][i])*(rot[frame0+2][i]-rot[frame0+0][i]);
 	}
+	// How the difference of rotations evolves : are we going farther from the first rotation
+	// or closer to it?
 	double sign = angleDiffPrec - angleDiffInit;
 
-	size_t frame = frame0+3;
+	// Comparison for all the other frames
+
+	// Frames at which a change of sign is detected
 	vector<int> signChanges;
-	while (frame < nbFrames) {
+	for (size_t frame = frame0+3; frame < nbFrames; frame++) {
 		double angleDiff = 0;
 		for (size_t i = 0; i < rot[frame].size(); i++) {
 			angleDiff += (rot[frame][i]-rot[0][i])*(rot[frame][i]-rot[0][i]);
@@ -362,27 +372,32 @@ int Skeleton::getMotionPeriod() {
 					signChanges.pop_back();
 					sign *= -1;
 				} else {
+					// Change of sign detected
 					signChanges.push_back(frame);
 					sign = angleDiff - angleDiffPrec;
 				}
 			}
 
 		}
-		frame++;
 		angleDiffPrec = angleDiff;
 	}
+
 	if (signChanges.size() < 2) {
+		// Not enough changes detected
 		return 0;
 	} else if (signChanges.size() < 3) {
+		// Semi-period = btw two following changes
 		return 2*(signChanges[1] - signChanges[0]);
 	} else {
+		// Period = btw first and third changes
 		return (signChanges[2] - signChanges[0]);
 	}
 }
 
 int Skeleton::getMotionBegin() {
-	size_t nbFrames = _dofs[0]._values.size();
 	// Look at the positions of the left feet, take the minimal one
+	size_t nbFrames = _dofs[0]._values.size();
+
 	// Get all the offsets until the foot
 	std::vector<glm::vec4> footOffsets;
 	Skeleton* cur = this;
@@ -391,10 +406,11 @@ int Skeleton::getMotionBegin() {
 		cur = cur->_children[0];
 	}
 
+	size_t frame0 = 0;
 	// Compute the position of the foot for each frame
 	std::vector<glm::vec4> footPositions;
 	int jointIndex = 0;
-	for (size_t f = 0; f < nbFrames; f++) {
+	for (size_t f = frame0; f < nbFrames; f++) {
 		cur = this;
 		jointIndex = 0;
 		glm::vec4 initPos = glm::vec4(0.0, 0.0, 0.0, 1.0);
@@ -407,13 +423,12 @@ int Skeleton::getMotionBegin() {
 			if(!cur->_dofs[i].name.compare("Yposition")) initPos.y = cur->_dofs[i]._values[f];
 			if(!cur->_dofs[i].name.compare("Xposition")) initPos.x = cur->_dofs[i]._values[f];
 		}
-		glm::vec4 footPos = initPos;
+		glm::vec4 footPos(0.0, 0.0, 0.0, 1.0);// = initPos;
 		glm::mat3 R;
 		eulerToMatrix(M_PI*rx/180.0, M_PI*ry/180.0, M_PI*rz/180.0, RotateOrder::roXYZ, &R);
 		glm::mat4 transfo = glm::mat4(R);
 		transfo[3] = footOffsets[jointIndex];
 		jointIndex++;
-		transfo = glm::transpose(transfo);
 		footPos = transfo*footPos;
 		cur = cur->_children[0];
 		while (cur->_name.compare("End")) {
@@ -427,32 +442,31 @@ int Skeleton::getMotionBegin() {
 			glm::mat4 transfo = glm::mat4(R);
 			transfo[3] = footOffsets[jointIndex];
 			jointIndex++;
-			transfo = glm::transpose(transfo);
 			footPos = transfo*footPos;
 			cur = cur->_children[0];
 		}
-		footPositions.push_back(footPos - initPos);
+		footPositions.push_back(footPos);
 	}
 
-	// Search the minimum of the Z position of the foot over all the frames
+	// Search the minimum of the Y position of the foot over all the frames
 	int frameMinPos = 0;
 	double minY = std::numeric_limits<double>::max();
-	for (size_t f = 0; f < nbFrames; f++) {
+	for (size_t f = 0; f < nbFrames-frame0; f++) {
 		double yPos = footPositions[f].y;
-		cout << f << " : " << yPos << "; ";
+		cout << f+frame0 << " : " << yPos << "; ";
 		if (footPositions[f].y < minY) {
 			minY = footPositions[f].y;
-			frameMinPos = f;
+			frameMinPos = f+frame0;
 			cout << endl;
 		}
 	}
 	cout << endl;
 
 	// Look for the first frame close enough to the min
-	double tol = 0.01;
-	for (size_t f = 0; f < nbFrames; f++) {
+	double tol = 0.05;
+	for (size_t f = 0; f < nbFrames-frame0; f++) {
 		if (abs(footPositions[f].y - minY) < tol) {
-			return f;
+			return f+frame0;
 		}
 	}
 	return frameMinPos;

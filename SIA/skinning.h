@@ -9,6 +9,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <vector>
 
+#define _DUAL_QUAT 0
+
 using qglviewer::Quaternion;
 
 enum _skinningTypes {
@@ -59,6 +61,7 @@ public :
 	void getBonesPos(Skeleton *skel, int *idx);
 	// build _transfoCurr :
 	void computeTransfo(Skeleton *skel, int *idx);
+	// build _dualQuatTransfoCurr :
 	void computeDualQuaternionTransform();
 
 	// build _weights :

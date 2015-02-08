@@ -8,8 +8,8 @@ DualQuaternion::DualQuaternion(void) {
 
 DualQuaternion::~DualQuaternion(void) {}
 
-DualQuaternion::DualQuaternion(Quaternion quat, Quaternion dual) {
-	_quat = quat.normalized();
+DualQuaternion::DualQuaternion(const Quaternion& quat, const Quaternion& dual) {
+	_quat = quat;
 	_dual = dual;
 }
 
@@ -36,10 +36,9 @@ void DualQuaternion::dualConjugate() {
 void DualQuaternion::operator += (const DualQuaternion& dq) {
 	Quaternion quat = Quaternion(_quat[0] + dq._quat[0], _quat[1] + dq._quat[1], _quat[2] + dq._quat[2], _quat[3] + dq._quat[3]);
 	Quaternion dual = Quaternion(_dual[0] + dq._dual[0], _dual[1] + dq._dual[1], _dual[2] + dq._dual[2], _dual[3] + dq._dual[3]);
-	_quat = quat.normalized();
+	_quat = quat;
 	_dual = dual;
 }
-
 
 DualQuaternion operator+(const DualQuaternion & dq1, const DualQuaternion & dq2) {
 	Quaternion quat = Quaternion(dq1._quat[0] + dq2._quat[0], dq1._quat[1] + dq2._quat[1], dq1._quat[2] + dq2._quat[2], dq1._quat[3] + dq2._quat[3]);
@@ -52,4 +51,11 @@ DualQuaternion operator*(double scalar, const DualQuaternion & dq) {
 	res._quat = Quaternion(scalar * res._quat[0], scalar * res._quat[1], scalar * res._quat[2], scalar * res._quat[3]);
 	res._dual = Quaternion(scalar * res._dual[0], scalar * res._dual[1], scalar * res._dual[2], scalar * res._dual[3]);
 	return res;
+}
+
+DualQuaternion operator*(const DualQuaternion & dq1, const DualQuaternion & dq2) {
+	Quaternion quat(dq2._quat*dq1._quat);
+	Quaternion dual((dq2._dual*dq1._quat)[0] + (dq2._quat*dq1._dual)[0], (dq2._dual*dq1._quat)[1] + (dq2._quat*dq1._dual)[1], 
+		(dq2._dual*dq1._quat)[2] + (dq2._quat*dq1._dual)[2], (dq2._dual*dq1._quat)[3] + (dq2._quat*dq1._dual)[3]);
+	return DualQuaternion(quat, dual);
 }
